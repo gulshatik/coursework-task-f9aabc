@@ -1,0 +1,46 @@
+===FILE: typing.py===
+"""
+A lightweight shim that re‑exports the standard ``typing`` module
+and patches :func:`typing.TypeVar` to accept the ``default`` keyword.
+This is required because the bundled ``pydantic_core`` wheel was built
+for an older Python release where ``TypeVar`` did not support the
+``default`` argument, leading to a runtime ``TypeError`` during import.
+
+The shim keeps all other names from the standard library untouched,
+so existing imports continue to work as expected.
+"""
+
+# Import the real typing module under a private name
+import typing as _typing
+
+# Re‑export everything that the original module provides
+__all__ = [name for name in dir(_typing) if not name.startswith("_")]
+
+# Copy all attributes from the real module into this shim
+for _name in __all__:
+    globals()[_name] = getattr(_typing, _name)
+
+# Patch TypeVar to accept ``default`` keyword argument
+def TypeVar(name: str, *types, **kwargs):
+    """
+    Wrapper around :func:`typing.TypeVar` that forwards all arguments,
+    but also accepts the ``default`` keyword for compatibility with
+    newer Pydantic versions.
+    """
+    if "default" in kwargs:
+        default = kwargs.pop("default")
+        # The real TypeVar accepts ``default`` from Python 3.11+.
+        return _typing.TypeVar(name, *types, **kwargs, default=default)
+    return _typing.TypeVar(name, *types, **kwargs)
+
+# Ensure the patched function is exported
+globals()["TypeVar"] = TypeVar
+
+# Clean up temporary names
+del _typing, _name, kwargs, name, types, default  # type: ignore
+
+---END---
+
+This shim must be placed in the project root so that any ``import typing``
+statement resolves to it before falling back to the standard library,
+thereby preventing the `TypeError` during module import.
